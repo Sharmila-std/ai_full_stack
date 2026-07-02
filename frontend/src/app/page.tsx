@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import SearchForm from "@/components/SearchForm";
 import ResultCard from "@/components/ResultCard";
+import SavePopup from "@/components/SavePopup";
 import { Influencer } from "@/types";
 import { Sparkles, HelpCircle, AlertCircle } from "lucide-react";
 
@@ -11,11 +12,26 @@ export default function DiscoverPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<Influencer[]>([]);
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
+  const [history, setHistory] = useState<Array<{ prompt: string; platforms: string[] }>>([]);
+  const [savingInfluencer, setSavingInfluencer] = useState<Influencer | null>(null);
   const [error, setError] = useState("");
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // Load existing CRM URLs on mount to avoid saving duplicates
+  // Fetch search history
+  const fetchSearchHistory = async () => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/search/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("Error loading search history:", err);
+    }
+  };
+
+  // Load existing CRM URLs and search history on mount
   useEffect(() => {
     async function fetchSavedInfluencers() {
       try {
@@ -30,6 +46,7 @@ export default function DiscoverPage() {
       }
     }
     fetchSavedInfluencers();
+    fetchSearchHistory();
   }, [apiBaseUrl]);
 
   const handleSearch = async (prompt: string, platforms: string[]) => {
@@ -53,6 +70,7 @@ export default function DiscoverPage() {
 
       const data = await res.json();
       setResults(data.results || []);
+      fetchSearchHistory(); // Reload history after search
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to query the search API. Please check backend config.");
@@ -61,21 +79,28 @@ export default function DiscoverPage() {
     }
   };
 
-  const handleSaveToCRM = async (influencer: Influencer): Promise<boolean> => {
+  const handleSaveToCRM = async (tags: string, notes: string): Promise<boolean> => {
+    if (!savingInfluencer) return false;
     try {
+      const payload = {
+        ...savingInfluencer,
+        tags: tags || null,
+        notes: notes || null,
+      };
+
       const res = await fetch(`${apiBaseUrl}/api/crm`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(influencer),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         // Update local saved state
         setSavedUrls((prev) => {
           const next = new Set(prev);
-          next.add(influencer.profile_url);
+          next.add(savingInfluencer.profile_url);
           return next;
         });
         return true;
@@ -109,7 +134,7 @@ export default function DiscoverPage() {
 
         {/* Input Form */}
         <div className="max-w-3xl mx-auto w-full">
-          <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+          <SearchForm onSearch={handleSearch} isLoading={isLoading} history={history} />
         </div>
 
         {/* Error State */}
@@ -162,7 +187,7 @@ export default function DiscoverPage() {
                   key={idx}
                   influencer={influencer}
                   isSaved={savedUrls.has(influencer.profile_url)}
-                  onSave={handleSaveToCRM}
+                  onSaveClick={(inf) => setSavingInfluencer(inf)}
                 />
               ))}
             </div>
@@ -179,6 +204,14 @@ export default function DiscoverPage() {
           </div>
         )}
       </main>
+
+      {/* Save Popup Modal overlay */}
+      <SavePopup
+        isOpen={savingInfluencer !== null}
+        onClose={() => setSavingInfluencer(null)}
+        onConfirm={handleSaveToCRM}
+        influencerName={savingInfluencer ? savingInfluencer.name : ""}
+      />
     </div>
   );
 }

@@ -6,9 +6,10 @@ import { Search, Loader2 } from "lucide-react";
 interface SearchFormProps {
   onSearch: (prompt: string, platforms: string[]) => void;
   isLoading: boolean;
+  history: Array<{ prompt: string; platforms: string[] }>;
 }
 
-export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
+export default function SearchForm({ onSearch, isLoading, history }: SearchFormProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([
     "Instagram",
@@ -95,8 +96,35 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
             <Search className="h-5 w-5" />
             <span>Discover Profiles</span>
           </>
-        )}
+        )
+        }
       </button>
+
+      {/* Search History section under the search bar */}
+      {history && history.length > 0 && (
+        <div className="pt-4 border-t border-card-border/40 space-y-2">
+          <span className="text-[10px] font-bold text-muted-foreground/75 uppercase tracking-widest block">
+            Recent Searches
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {history.map((item, idx) => (
+              <button
+                key={idx}
+                type="button"
+                disabled={isLoading}
+                onClick={() => {
+                  setPrompt(item.prompt);
+                  setSelectedPlatforms(item.platforms);
+                  onSearch(item.prompt, item.platforms);
+                }}
+                className="text-xs px-3 py-1.5 bg-[#090d16] hover:bg-primary/15 border border-card-border/60 hover:border-primary/45 text-muted-foreground hover:text-indigo-300 rounded-xl transition-all cursor-pointer inline-flex items-center"
+              >
+                {item.prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </form>
   );
 }

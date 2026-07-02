@@ -1,34 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
-import { ExternalLink, Check, UserPlus, Flame, AlertCircle } from "lucide-react";
+import React from "react";
+import { ExternalLink, Check, UserPlus, Flame } from "lucide-react";
 import { Influencer } from "@/types";
 
 interface ResultCardProps {
   influencer: Influencer;
   isSaved: boolean;
-  onSave: (influencer: Influencer) => Promise<boolean>;
+  onSaveClick: (influencer: Influencer) => void;
 }
 
-export default function ResultCard({ influencer, isSaved, onSave }: ResultCardProps) {
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    setSaveError("");
-    try {
-      const success = await onSave(influencer);
-      if (!success) {
-        setSaveError("Failed to save. Check if already in CRM.");
-      }
-    } catch (e) {
-      setSaveError("Database error occurred.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
+export default function ResultCard({ influencer, isSaved, onSaveClick }: ResultCardProps) {
   const getPlatformColor = (platform: string) => {
     switch (platform.toLowerCase()) {
       case "instagram":
@@ -119,7 +101,7 @@ export default function ResultCard({ influencer, isSaved, onSave }: ResultCardPr
       </div>
 
       {/* Save Action */}
-      <div className="mt-6 space-y-2">
+      <div className="mt-6">
         {isSaved ? (
           <div className="w-full py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-semibold rounded-xl flex items-center justify-center space-x-2">
             <Check className="h-4 w-4" />
@@ -127,26 +109,12 @@ export default function ResultCard({ influencer, isSaved, onSave }: ResultCardPr
           </div>
         ) : (
           <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="w-full py-2.5 bg-[#0d131f] border border-card-border hover:bg-primary hover:text-white hover:border-primary text-muted-foreground font-semibold text-sm rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+            onClick={() => onSaveClick(influencer)}
+            className="w-full py-2.5 bg-[#0d131f] border border-card-border hover:bg-primary hover:text-white hover:border-primary text-muted-foreground font-semibold text-sm rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
           >
-            {isSaving ? (
-              <span className="animate-pulse">Saving...</span>
-            ) : (
-              <>
-                <UserPlus className="h-4 w-4" />
-                <span>Add to CRM</span>
-              </>
-            )}
+            <UserPlus className="h-4 w-4" />
+            <span>Add to CRM</span>
           </button>
-        )}
-
-        {saveError && (
-          <div className="text-rose-400 text-xs flex items-center space-x-1.5 justify-center">
-            <AlertCircle className="h-3 w-3" />
-            <span>{saveError}</span>
-          </div>
         )}
       </div>
     </div>

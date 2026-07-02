@@ -8,6 +8,8 @@ export interface Influencer {
   followers?: string;
   match_score: number;
   match_reason?: string;
+  tags?: string;
+  notes?: string;
   created_at?: string;
 }
 

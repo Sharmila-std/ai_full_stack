@@ -16,4 +16,15 @@ class InfluencerModel(Base):
     followers = Column(String(100), nullable=True, default="Not Available")
     match_score = Column(Integer, nullable=False, default=0)
     match_reason = Column(Text, nullable=True)
+    tags = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class SearchHistoryModel(Base):
+    __tablename__ = "search_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prompt = Column(Text, nullable=False)
+    platforms = Column(Text, nullable=False)  # Stored as comma-separated values
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

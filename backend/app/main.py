@@ -1,11 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+import csv
+import io
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
 from .database import engine, Base, get_db
-from .schemas import SearchRequest, SearchResponse, InfluencerResponse, InfluencerCreate
+from .models import SearchHistoryModel
+from .schemas import (
+    SearchRequest, 
+    SearchResponse, 
+    InfluencerResponse, 
+    InfluencerCreate, 
+    SearchHistoryResponse
+)
 from .services import crm_service, google_service, youtube_service, groq_service
 
 # Initialize database tables
@@ -32,19 +41,38 @@ def read_root():
     return {"status": "running", "message": "AI Influencer Discovery Agent API is active."}
 
 @app.post("/api/search", response_model=SearchResponse)
-async def search_influencers(request: SearchRequest):
+async def search_influencers(request: SearchRequest, db: Session = Depends(get_db)):
     """
     Orchestrates the entire discovery pipeline:
-    1. Python templates generate query terms.
-    2. Google (Serper) and YouTube search concurrently.
-    3. Python removes invalid profile URLs and filters duplicates.
-    4. Groq LLM filters candidates and generates match score & reason.
+    1. Logs the query text and platforms to search history (limits history to latest 10).
+    2. Python templates generate query terms.
+    3. Google (Serper) and YouTube search concurrently.
+    4. Python removes invalid profile URLs and filters duplicates.
+    5. Groq LLM filters candidates and generates match score & reason.
     """
     if not request.prompt.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Prompt cannot be empty."
         )
+
+    # 1. Log query to search history
+    try:
+        new_history = SearchHistoryModel(
+            prompt=request.prompt.strip(),
+            platforms=",".join(request.platforms)
+        )
+        db.add(new_history)
+        db.commit()
+        
+        # Limit history to latest 10
+        history_items = db.query(SearchHistoryModel).order_by(SearchHistoryModel.created_at.desc()).all()
+        if len(history_items) > 10:
+            for item in history_items[10:]:
+                db.delete(item)
+            db.commit()
+    except Exception as e:
+        print(f"[ERROR] Failed to save search history: {e}")
 
     all_candidates = []
     
@@ -76,6 +104,31 @@ async def search_influencers(request: SearchRequest):
     
     return {"results": final_matches}
 
+@app.get("/api/search/history", response_model=List[SearchHistoryResponse])
+def get_search_history(db: Session = Depends(get_db)):
+    """
+    Retrieves the latest 10 search queries from history.
+    """
+    items = db.query(SearchHistoryModel).order_by(SearchHistoryModel.created_at.desc()).limit(10).all()
+    response_items = []
+    for item in items:
+        response_items.append({
+            "id": item.id,
+            "prompt": item.prompt,
+            "platforms": item.platforms.split(",") if item.platforms else [],
+            "created_at": item.created_at
+        })
+    return response_items
+
+@app.delete("/api/search/history")
+def clear_search_history(db: Session = Depends(get_db)):
+    """
+    Clears all search history.
+    """
+    db.query(SearchHistoryModel).delete()
+    db.commit()
+    return {"status": "success", "message": "Search history cleared."}
+
 @app.get("/api/crm", response_model=List[InfluencerResponse])
 def get_crm_influencers(db: Session = Depends(get_db)):
     """
@@ -86,7 +139,7 @@ def get_crm_influencers(db: Session = Depends(get_db)):
 @app.post("/api/crm", response_model=InfluencerResponse, status_code=status.HTTP_201_CREATED)
 def save_influencer_to_crm(influencer: InfluencerCreate, db: Session = Depends(get_db)):
     """
-    Saves an influencer profile to PostgreSQL. Prevents duplicate profile_url inserts.
+    Saves an influencer profile. Prevents duplicate profile_url inserts.
     """
     return crm_service.create_influencer(db, influencer)
 
@@ -102,3 +155,52 @@ def delete_influencer_from_crm(id: UUID, db: Session = Depends(get_db)):
             detail=f"Influencer with ID {id} not found in CRM."
         )
     return {"status": "success", "message": "Influencer deleted from CRM."}
+
+@app.get("/api/crm/export")
+def export_crm_to_csv(db: Session = Depends(get_db)):
+    """
+    Exports all saved influencers from the CRM to a CSV file.
+    """
+    influencers = crm_service.get_influencers(db)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header row matching exact assignment requests
+    writer.writerow([
+        "Name",
+        "Username",
+        "Platform",
+        "Profile URL",
+        "Followers",
+        "Match Score",
+        "Match Reason",
+        "Tags",
+        "Notes",
+        "Created At"
+    ])
+    
+    for inf in influencers:
+        writer.writerow([
+            inf.name,
+            inf.username,
+            inf.platform,
+            inf.profile_url,
+            inf.followers,
+            inf.match_score,
+            inf.match_reason,
+            inf.tags or "",
+            inf.notes or "",
+            inf.created_at.strftime("%Y-%m-%d %H:%M:%S") if inf.created_at else ""
+        ])
+        
+    csv_data = output.getvalue()
+    output.close()
+    
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=influencers.csv"
+        }
+    )

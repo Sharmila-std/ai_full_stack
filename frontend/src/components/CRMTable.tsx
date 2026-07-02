@@ -66,6 +66,8 @@ export default function CRMTable({ influencers, onDelete }: CRMTableProps) {
               <th className="py-4 px-6">Platform</th>
               <th className="py-4 px-6 text-center">Score</th>
               <th className="py-4 px-6">Followers</th>
+              <th className="py-4 px-6">Tags</th>
+              <th className="py-4 px-6">Notes</th>
               <th className="py-4 px-6">Evaluation Reason</th>
               <th className="py-4 px-6 text-right">Actions</th>
             </tr>
@@ -106,6 +108,29 @@ export default function CRMTable({ influencers, onDelete }: CRMTableProps) {
 
                 {/* Followers count */}
                 <td className="py-4 px-6 font-medium text-foreground">{inf.followers || "Not Available"}</td>
+
+                {/* Tags column */}
+                <td className="py-4 px-6">
+                  <div className="flex flex-wrap gap-1 max-w-[150px]">
+                    {inf.tags ? (
+                      inf.tags.split(",").map((tag, tagIdx) => (
+                        <span
+                          key={tagIdx}
+                          className="px-2 py-0.5 bg-primary/10 border border-primary/20 text-indigo-300 text-[10px] font-semibold rounded-md"
+                        >
+                          {tag.trim()}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground/35 text-xs">-</span>
+                    )}
+                  </div>
+                </td>
+
+                {/* Notes column */}
+                <td className="py-4 px-6 text-muted-foreground max-w-[180px] truncate" title={inf.notes}>
+                  {inf.notes || <span className="text-muted-foreground/35 text-xs">-</span>}
+                </td>
 
                 {/* Reason column */}
                 <td className="py-4 px-6 text-muted-foreground max-w-xs truncate" title={inf.match_reason}>

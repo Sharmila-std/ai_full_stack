@@ -13,6 +13,8 @@ class InfluencerBase(BaseModel):
     followers: Optional[str] = "Not Available"
     match_score: int = 0
     match_reason: Optional[str] = None
+    tags: Optional[str] = None
+    notes: Optional[str] = None
 
 class InfluencerCreate(InfluencerBase):
     pass
@@ -34,3 +36,13 @@ class SearchResultItem(InfluencerBase):
 
 class SearchResponse(BaseModel):
     results: List[SearchResultItem]
+
+class SearchHistoryResponse(BaseModel):
+    id: UUID
+    prompt: str
+    platforms: List[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
