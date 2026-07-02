@@ -102,7 +102,10 @@ async def search_influencers(request: SearchRequest, db: Session = Depends(get_d
     # Send filtered candidates to Groq for matching evaluation
     final_matches = await groq_service.evaluate_candidates(request.prompt, deduped_candidates)
     
-    return {"results": final_matches}
+    # Sort by match score descending and limit to top 10
+    final_matches.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+    
+    return {"results": final_matches[:10]}
 
 @app.get("/api/search/history", response_model=List[SearchHistoryResponse])
 def get_search_history(db: Session = Depends(get_db)):

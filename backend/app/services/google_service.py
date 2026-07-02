@@ -1,10 +1,30 @@
 import httpx
 import re
 from typing import List, Dict, Any, Set
+from urllib.parse import urlparse
 from ..config import settings
 
 # Regex to match valid profiles
 INSTAGRAM_PROFILE_RE = re.compile(r"^https?://(?:www\.)?instagram\.com/([a-zA-Z0-9_\.]+)/?$")
+
+def get_numeric_followers(followers_str: str) -> int:
+    if not followers_str or followers_str == "Not Available":
+        return -1
+    
+    followers_str = followers_str.lower().strip()
+    followers_str = followers_str.replace(",", "").replace(" ", "")
+    
+    try:
+        if followers_str.endswith("m"):
+            return int(float(followers_str[:-1]) * 1_000_000)
+        elif followers_str.endswith("k"):
+            return int(float(followers_str[:-1]) * 1_000)
+        elif followers_str.endswith("b"):
+            return int(float(followers_str[:-1]) * 1_000_000_000)
+        else:
+            return int(float(followers_str))
+    except Exception:
+        return -1
 TIKTOK_PROFILE_RE = re.compile(r"^https?://(?:www\.)?tiktok\.com/(@[a-zA-Z0-9_\-\.]+)/?$")
 TWITTER_PROFILE_RE = re.compile(r"^https?://(?:www\.)?(?:twitter|x)\.com/([a-zA-Z0-9_]+)/?$")
 
@@ -14,23 +34,6 @@ FOLLOWER_RE = re.compile(r"\b([0-9\.]+[KMBkmb]?)\s*(?:[Ff]ollowers|[Ss]ubscriber
 def clean_url(url: str) -> str:
     # Remove query params (like fbclid, UTM, etc.)
     return url.split("?")[0].rstrip("/")
-
-def is_valid_profile(platform: str, url: str) -> bool:
-    url_cleaned = clean_url(url)
-    
-    # Exclude typical non-profile routes
-    invalid_patterns = ["/reel/", "/p/", "/posts/", "/explore/", "/hashtag/", "/tag/", "/search", "/status/", "/watch"]
-    if any(p in url_cleaned.lower() for p in invalid_patterns):
-        return False
-        
-    if platform.lower() == "instagram":
-        return bool(INSTAGRAM_PROFILE_RE.match(url_cleaned))
-    elif platform.lower() == "tiktok":
-        return bool(TIKTOK_PROFILE_RE.match(url_cleaned))
-    elif platform.lower() == "twitter":
-        return bool(TWITTER_PROFILE_RE.match(url_cleaned))
-        
-    return False
 
 def extract_username(platform: str, url: str) -> str:
     url_cleaned = clean_url(url)
@@ -44,6 +47,40 @@ def extract_username(platform: str, url: str) -> str:
         m = TWITTER_PROFILE_RE.match(url_cleaned)
         return m.group(1) if m else ""
     return ""
+
+def is_valid_profile(platform: str, url: str) -> bool:
+    url_cleaned = clean_url(url)
+    
+    # Parse URL segments to avoid false positives (e.g. usernames containing blacklisted words like "shorts")
+    parsed = urlparse(url_cleaned)
+    path_segments = [seg.lower().strip() for seg in parsed.path.split("/") if seg.strip()]
+    
+    # Expanded blacklist of invalid routes, posts, tags and generic pages
+    blacklist = {
+        "reel", "reels", "stories", "story", "post", "posts", "explore",
+        "accounts", "login", "signup", "about", "help", "support",
+        "privacy", "terms", "directory", "hashtag", "tags", "search",
+        "oauth", "feed", "watch", "shorts", "popular", "developer", "blog", "legal"
+    }
+    
+    # Reject if any URL path segment is in the blacklist
+    if any(seg in blacklist for seg in path_segments):
+        return False
+        
+    # Reject if the username itself matches any generic/system page names
+    username = extract_username(platform, url_cleaned)
+    if not username or username.lower() in blacklist:
+        return False
+        
+    # Positive validation of profile patterns
+    if platform.lower() == "instagram":
+        return bool(INSTAGRAM_PROFILE_RE.match(url_cleaned))
+    elif platform.lower() == "tiktok":
+        return bool(TIKTOK_PROFILE_RE.match(url_cleaned))
+    elif platform.lower() == "twitter":
+        return bool(TWITTER_PROFILE_RE.match(url_cleaned))
+        
+    return False
 
 def extract_name_from_title(title: str, username: str) -> str:
     # Clean standard title suffixes
@@ -69,7 +106,7 @@ def parse_follower_count(text: str) -> str:
 
 async def search_google_serper(prompt: str, platforms: List[str]) -> List[Dict[str, Any]]:
     """
-    Generates queries for Serper, queries the Serper API, parses the outputs, and extracts candidate structures.
+    Generates template queries for Serper, queries Serper, parses results, and extracts candidates.
     """
     api_key = settings.SERPER_API_KEY
     if not api_key:
@@ -91,21 +128,21 @@ async def search_google_serper(prompt: str, platforms: List[str]) -> List[Dict[s
     for p in req_platforms:
         if p in platform_domains:
             platform_name, site_filter = platform_domains[p]
-            # Template 1: Exact target domain
-            queries.append((platform_name, f"{prompt} {site_filter}"))
-            # Template 2: General target keyword
+            # Generate 4 robust templates per platform to increase coverage while focusing on creators
+            queries.append((platform_name, f"{prompt} {platform_name} creator"))
             queries.append((platform_name, f"{prompt} {platform_name} influencer"))
+            queries.append((platform_name, f"{prompt} content creator"))
+            queries.append((platform_name, f"{site_filter} {prompt}"))
 
     if not queries:
-        # Fallback if no target platforms selected
-        queries.append(("Instagram", f"{prompt} site:instagram.com"))
-        queries.append(("TikTok", f"{prompt} site:tiktok.com"))
+        queries.append(("Instagram", f"site:instagram.com {prompt}"))
+        queries.append(("TikTok", f"site:tiktok.com {prompt}"))
 
     candidates = []
     seen_urls: Set[str] = set()
 
     async with httpx.AsyncClient() as client:
-        # For simplicity, query Serper sequentially or concurrently (since it's async)
+        # Sequential execution of templates
         for platform_name, query_str in queries:
             try:
                 url = "https://google.serper.dev/search"
@@ -115,19 +152,17 @@ async def search_google_serper(prompt: str, platforms: List[str]) -> List[Dict[s
                 }
                 payload = {
                     "q": query_str,
-                    "num": 10
+                    "num": 8  # Limit candidate queries to prevent heavy payload overhead
                 }
                 
                 print(f"[DEBUG] Querying Serper: '{query_str}'")
                 response = await client.post(url, headers=headers, json=payload, timeout=10.0)
-                print(f"[DEBUG] Serper status: {response.status_code}")
                 if response.status_code != 200:
                     print(f"[ERROR] Serper search failed: {response.text}")
                     continue
                 
                 data = response.json()
                 organic_results = data.get("organic", [])
-                print(f"[DEBUG] Organic results count: {len(organic_results)}")
                 
                 for item in organic_results:
                     link = item.get("link", "")
@@ -138,27 +173,27 @@ async def search_google_serper(prompt: str, platforms: List[str]) -> List[Dict[s
                         continue
                         
                     link_cleaned = clean_url(link)
-                    print(f"[DEBUG] Link found: {link_cleaned}")
                     
                     if link_cleaned in seen_urls:
-                        print(f"[DEBUG] Link already seen: {link_cleaned}")
                         continue
                     
-                    # Verify it matches our platform profile rules & doesn't contain noise
+                    # Verify using positive and blacklist rules
                     if not is_valid_profile(platform_name, link_cleaned):
-                        print(f"[DEBUG] Link rejected by is_valid_profile: {link_cleaned} (platform: {platform_name})")
                         continue
                         
                     username = extract_username(platform_name, link_cleaned)
                     if not username:
-                        print(f"[DEBUG] No username extracted from: {link_cleaned}")
                         continue
                         
                     name = extract_name_from_title(title, username)
                     followers = parse_follower_count(snippet)
                     if followers == "Not Available":
-                        # Try parsing from title
                         followers = parse_follower_count(title)
+                        
+                    # Filter out profiles explicitly parsed to have fewer than 2,000 followers
+                    num_followers = get_numeric_followers(followers)
+                    if 0 <= num_followers < 2000:
+                        continue
                         
                     candidates.append({
                         "name": name,
@@ -168,11 +203,9 @@ async def search_google_serper(prompt: str, platforms: List[str]) -> List[Dict[s
                         "bio": snippet if snippet else f"Profile page for {name}.",
                         "followers": followers
                     })
-                    print(f"[DEBUG] Added candidate: {name} (@{username}) - {platform_name}")
                     seen_urls.add(link_cleaned)
                     
             except Exception as e:
                 print(f"[ERROR] Failed searching query '{query_str}': {e}")
                 
-    print(f"[DEBUG] Total Google candidates: {len(candidates)}")
     return candidates

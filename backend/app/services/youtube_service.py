@@ -118,6 +118,11 @@ async def search_youtube_channels(prompt: str) -> List[Dict[str, Any]]:
                     username = custom_url.replace("@", "") if custom_url else cid
                     
                     sub_count_str = statistics.get("subscriberCount", "")
+                    sub_count = int(sub_count_str) if sub_count_str.isdigit() else 0
+                    if sub_count < 2000:
+                        # Skip channels with fewer than 2,000 subscribers
+                        continue
+                        
                     followers = format_subscribers(sub_count_str)
                     
                     candidates.append({

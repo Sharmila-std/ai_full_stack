@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ExternalLink, Check, UserPlus, Flame } from "lucide-react";
+import { ExternalLink, Check, UserPlus } from "lucide-react";
 import { Influencer } from "@/types";
 
 interface ResultCardProps {
@@ -33,15 +33,11 @@ export default function ResultCard({ influencer, isSaved, onSaveClick }: ResultC
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all duration-300" />
       
       <div className="space-y-4">
-        {/* Header: Platform & Score */}
+        {/* Header: Platform Only */}
         <div className="flex justify-between items-start">
           <span className={`px-2.5 py-1 rounded-lg border text-xs font-semibold uppercase tracking-wider ${getPlatformColor(influencer.platform)}`}>
             {influencer.platform}
           </span>
-          <div className="flex items-center space-x-1 text-amber-400 font-bold bg-amber-400/5 px-2.5 py-1 rounded-lg border border-amber-400/10">
-            <Flame className="h-4 w-4" />
-            <span>{influencer.match_score}%</span>
-          </div>
         </div>
 
         {/* Profile Info */}

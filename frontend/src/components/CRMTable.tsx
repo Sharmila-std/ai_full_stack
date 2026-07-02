@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ExternalLink, Trash2, ShieldAlert, Flame } from "lucide-react";
+import { ExternalLink, Trash2, ShieldAlert } from "lucide-react";
 import { Influencer } from "@/types";
 
 interface CRMTableProps {
@@ -64,7 +64,6 @@ export default function CRMTable({ influencers, onDelete }: CRMTableProps) {
             <tr className="border-b border-card-border bg-[#0d131f]/70 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <th className="py-4 px-6">Influencer Profile</th>
               <th className="py-4 px-6">Platform</th>
-              <th className="py-4 px-6 text-center">Score</th>
               <th className="py-4 px-6">Followers</th>
               <th className="py-4 px-6">Tags</th>
               <th className="py-4 px-6">Notes</th>
@@ -96,14 +95,6 @@ export default function CRMTable({ influencers, onDelete }: CRMTableProps) {
                   <span className={`px-2.5 py-0.5 rounded-lg border text-xs font-semibold uppercase ${getPlatformClass(inf.platform)}`}>
                     {inf.platform}
                   </span>
-                </td>
-
-                {/* Score column */}
-                <td className="py-4 px-6 text-center">
-                  <div className="inline-flex items-center space-x-0.5 text-amber-400 font-bold bg-amber-400/5 px-2 py-0.5 rounded border border-amber-400/10 text-xs">
-                    <Flame className="h-3.5 w-3.5" />
-                    <span>{inf.match_score}%</span>
-                  </div>
                 </td>
 
                 {/* Followers count */}
