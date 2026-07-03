@@ -16,7 +16,7 @@ export default function SearchForm({ onSearch, isLoading, history }: SearchFormP
     "YouTube",
   ]);
 
-  const platforms = ["Instagram", "YouTube", "TikTok", "Twitter"];
+  const platforms = ["Instagram", "YouTube", "Twitter"];
 
   const handlePlatformToggle = (platform: string) => {
     if (selectedPlatforms.includes(platform)) {
